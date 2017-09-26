@@ -2,7 +2,9 @@ from __future__ import unicode_literals
 
 import logging
 import requests
+import urllib
 import json
+import datetime
 from locale import gettext as _
 
 import gi
@@ -53,6 +55,37 @@ class TogglAPI:
         else:
             logger.error('No token set')
 
+    def get_entries(self, wid):
+        # last week's entries
+        if self.token:
+            # Build timestamps
+            def fake_utcoffset(d):
+                # TODO: not be so lazy
+                dot_idx = d.index('.')
+                d = d[:dot_idx]
+                d += '+00:00'
+                return d
+
+            end_date = urllib.parse.quote_plus(fake_utcoffset(datetime.datetime.today().isoformat()))
+            start_date = datetime.datetime.today() - datetime.timedelta(days=7)
+            start_date = urllib.parse.quote_plus(fake_utcoffset(start_date.isoformat()))
+            r = requests.get(self.api_url + '/time_entries?start_date={0}&end_date={1}'.format(start_date, end_date), auth=requests.auth.HTTPBasicAuth(self.token, 'api_token'))
+            # filter with workspace id given
+            data = json.loads(r.text)
+            logger.debug('Got {0} time entries'.format(len(data)))
+            fil_entries = list(filter(lambda x: x['wid'] == wid, data))
+            logger.debug('Filtered to {0} time entries that match WID'.format(len(fil_entries)))
+            # filter unique names
+            entries = []
+            names = []
+            for fe in fil_entries:
+                if fe['description'] not in names:
+                    names.append(fe['description'])
+                    entries.append(fe)
+            return entries
+        else:
+            logger.error('No token set')
+
 togglAPI = TogglAPI()
 
 class TogglGUI:
@@ -63,20 +96,32 @@ class TogglGUI:
             modal=True,
             resizable=True,
             window_position=Gtk.WindowPosition.CENTER_ON_PARENT,
-            buttons=(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE)
+            buttons=(Gtk.STOCK_APPLY, Gtk.ResponseType.APPLY)
         )
         self.widget.connect('response', self.on_dialog_response)
         self.widget.set_size_request(350, 300)
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        grid = Gtk.Grid(
+            column_spacing=6,
+            margin_bottom=12,
+            margin_left=12,
+            margin_right=12,
+            margin_top=12,
+            row_spacing=6,
+        )
         workspace_cb = Gtk.ComboBox()
         workspace_store = Gtk.ListStore(str, int)
         workspace_renderer = Gtk.CellRendererText()
         workspace_cb.pack_start(workspace_renderer, 0)
         workspace_cb.add_attribute(workspace_renderer, 'text', 0)
-        self.widget.add(workspace_cb)
-        workspace_cb.set_wrap_width(1)
+        workspace_cb.connect('changed', self.on_ws_change)
+        grid.attach(workspace_cb, 0, 0, 1, 1)
 
+        self.entry_store = Gtk.ListStore(str)
+
+        entry_cb = Gtk.ComboBox.new_with_model_and_entry(self.entry_store)
+        entry_cb.set_entry_text_column(0)
+        grid.attach(entry_cb, 0, 1, 1, 1)
         workspaces = togglAPI.get_workspaces()
         logger.debug('Got {0} workspaces'.format(len(workspaces)))
 
@@ -84,23 +129,22 @@ class TogglGUI:
             workspace_store.append([workspace['name'], workspace['id']])
 
         workspace_cb.set_model(workspace_store)
-        workspace_cb.connect('changed', self.on_ws_change)
-        workspace_cb.set_active(0)
 
-        vbox.pack_start(workspace_cb, False, False, False)
-
-        entry_cb = Gtk.ComboBoxText.new_with_entry()
-        entry_cb.append_text('test')
-        vbox.pack_start(entry_cb, False, False, False)
         # After
-        self.widget.add_action_widget(vbox, 0)
+        self.widget.add_action_widget(grid, 0)
 
     def on_ws_change(self, combo):
         tree_iter = combo.get_active_iter()
         if tree_iter:
             model = combo.get_model()
-            wid, name = model[tree_iter][:2]
+            name, wid = model[tree_iter][:2]
             logger.info('Selected workspace {0} ({1})'.format(name, wid))
+            # fill entry cb
+            entries = togglAPI.get_entries(wid)
+            self.entry_store.clear()
+            for e in entries:
+                logger.info('Adding {0}'.format(e['description']))
+                self.entry_store.append([e['description']])
 
     def on_entry_change(self, entry):
         logger.info(entry.get_text() + ' chosen')
