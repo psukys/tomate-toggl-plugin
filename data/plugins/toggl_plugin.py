@@ -26,6 +26,8 @@ COMMANDS = [
     CONFIG_API_OPTION_NAME
 ]
 
+curr_wid = None
+curr_entry_id = None
 
 def parse_command(command):
     if command is not None:
@@ -86,11 +88,40 @@ class TogglAPI:
         else:
             logger.error('No token set')
 
+    def start_entry(self, wid, description):
+        if self.token:
+            r = requests.post(self.api_url + '/time_entries/start', json = {'time_entry': {'wid': wid, 'description': description, 'created_with': 'tomate-toggl-plugin'}}, auth=requests.auth.HTTPBasicAuth(self.token, 'api_token'))
+            if r.status_code == 200:
+                data = json.loads(r.text)
+                global curr_entry_id, curr_wid
+                curr_entry_id = data['data']['id']
+                curr_wid = data['data']['wid']
+                logger.info('Started {0} entry as ID {1}'.format(description, curr_entry_id))
+                return True
+            else:
+                logger.error('Failed to start entry: \n{0}'.format(r.text))
+        else:
+            logger.error('No token set')
+
+    def stop_entry(self, entry_id):
+        if self.token:
+            r = requests.put('{0}/time_entries/{1}/stop'.format(self.api_url, entry_id), auth=requests.auth.HTTPBasicAuth(self.token, 'api_token'))
+            if r.status_code == 200:
+                logger.info('{0} entry stopped'.format(entry_id))
+                global curr_entry_id, curr_wid
+                curr_entry_id = None
+                curr_wid = None
+            else:
+                logger.error('Failed to stop entry {1}: \n{0}'.format(r.text, r.url))
+        else:
+            logger.error('No token set')
+
 togglAPI = TogglAPI()
 
-class TogglGUI:
+class TogglGUI(Gtk.Dialog):
     def __init__(self):
-        self.widget = Gtk.Dialog(
+        Gtk.Dialog.__init__(
+            self,
             _('Toggl'),
             None,
             modal=True,
@@ -98,8 +129,8 @@ class TogglGUI:
             window_position=Gtk.WindowPosition.CENTER_ON_PARENT,
             buttons=(Gtk.STOCK_APPLY, Gtk.ResponseType.APPLY)
         )
-        self.widget.connect('response', self.on_dialog_response)
-        self.widget.set_size_request(350, 300)
+        # self.connect('response', self.)
+        self.set_size_request(350, 300)
 
         grid = Gtk.Grid(
             column_spacing=6,
@@ -121,6 +152,7 @@ class TogglGUI:
 
         entry_cb = Gtk.ComboBox.new_with_model_and_entry(self.entry_store)
         entry_cb.set_entry_text_column(0)
+        entry_cb.connect('changed', self.on_entry_change)
         grid.attach(entry_cb, 0, 1, 1, 1)
         workspaces = togglAPI.get_workspaces()
         logger.debug('Got {0} workspaces'.format(len(workspaces)))
@@ -131,30 +163,27 @@ class TogglGUI:
         workspace_cb.set_model(workspace_store)
 
         # After
-        self.widget.add_action_widget(grid, 0)
+        self.add_action_widget(grid, 0)
+        self.show_all()
 
     def on_ws_change(self, combo):
         tree_iter = combo.get_active_iter()
         if tree_iter:
             model = combo.get_model()
-            name, wid = model[tree_iter][:2]
-            logger.info('Selected workspace {0} ({1})'.format(name, wid))
+            name, self.wid = model[tree_iter][:2]
+            logger.info('Selected workspace {0} ({1})'.format(name, self.wid))
             # fill entry cb
-            entries = togglAPI.get_entries(wid)
+            entries = togglAPI.get_entries(self.wid)
             self.entry_store.clear()
             for e in entries:
                 logger.info('Adding {0}'.format(e['description']))
                 self.entry_store.append([e['description']])
 
     def on_entry_change(self, entry):
-        logger.info(entry.get_text() + ' chosen')
+        item = entry.get_child()
+        self.entry = item.get_text()
+        logger.info(self.entry + ' chosen')
 
-    def on_dialog_response(self, widget, resposne):
-        self.widget.hide()
-
-    def run(self):
-        self.widget.show_all()
-        return self.widget
 
 
 class PreferenceDialog:
@@ -292,17 +321,27 @@ class TogglPlugin(tomate.plugin.Plugin):
         togglAPI.check_token(token)
 
         toggl_window = TogglGUI()
-        toggl_window.run()
+        response = toggl_window.run()
+        toggl_window.hide()
+        if response == Gtk.ResponseType.APPLY:
+            togglAPI.start_entry(wid=toggl_window.wid, description=toggl_window.entry)
 
     @suppress_errors
     @on(Events.Session, [State.stopped])
     def on_session_stopped(self, *args, **kwargs):
-        pass
+        token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
+        togglAPI.check_token(token)
+
+        togglAPI.stop_entry(curr_entry_id)
+
 
     @suppress_errors
     @on(Events.Session, [State.finished])
     def on_session_finished(self, *args, **kwargs):
-        pass
+        token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
+        togglAPI.check_token(token)
+
+        togglAPI.stop_entry(curr_entry_id)
 
     def settings_window(self):
         return self.preference_window.run()
