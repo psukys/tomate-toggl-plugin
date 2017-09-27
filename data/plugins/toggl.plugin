@@ -1,0 +1,9 @@
+[Core]
+Name = Toggl
+Module = toggl_plugin
+
+[Documentation]
+Author = Paulius Šukys
+Version = 0.1.0
+Website = https://github.com/psukys/tomate-toggl-plugin
+Description = Tomate plugin to post time spent to Toggl time tracker
