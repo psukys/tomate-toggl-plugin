@@ -313,6 +313,7 @@ class TogglPlugin(tomate.plugin.Plugin):
         super(TogglPlugin, self).__init__()
         self.config = graph.get('tomate.config')
         self.preference_window = PreferenceDialog(self.config)
+        self.toggl_activity_started = False
 
     @suppress_errors
     @on(Events.Session, [State.started])
@@ -325,14 +326,17 @@ class TogglPlugin(tomate.plugin.Plugin):
         toggl_window.hide()
         if response == Gtk.ResponseType.APPLY:
             togglAPI.start_entry(wid=toggl_window.wid, description=toggl_window.entry)
+            self.toggl_activity_started = True
 
     @suppress_errors
     @on(Events.Session, [State.stopped])
     def on_session_stopped(self, *args, **kwargs):
-        token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
-        togglAPI.check_token(token)
+        if self.toggl_activity_started:
+            token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
+            togglAPI.check_token(token)
 
-        togglAPI.stop_entry(curr_entry_id)
+            togglAPI.stop_entry(curr_entry_id)
+            self.toggl_activity_started = False
 
 
     @suppress_errors
