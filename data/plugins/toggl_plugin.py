@@ -18,6 +18,7 @@ from tomate.constant import State
 from tomate.event import Events, on
 from tomate.graph import graph
 from tomate.utils import suppress_errors
+from tomate.constant import Task
 
 logger = logging.getLogger(__name__)
 CONFIG_SECTION_NAME = 'toggl_plugin'
@@ -317,6 +318,8 @@ class TogglPlugin(tomate.plugin.Plugin):
     @suppress_errors
     @on(Events.Session, [State.started])
     def on_session_started(self, *args, **kwargs):
+        if kwargs['task'] is not Task.pomodoro:
+            return #  Only apply Toggl for working sessions
         token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
         togglAPI.check_token(token)
 
