@@ -27,9 +27,6 @@ COMMANDS = [
     CONFIG_API_OPTION_NAME
 ]
 
-curr_wid = None
-curr_entry_id = None
-
 def parse_command(command):
     if command is not None:
         return command.strip()
@@ -39,6 +36,8 @@ class TogglAPI:
     api_url = 'https://www.toggl.com/api/v8'
     def __init__(self):
         self.token = None
+        self.curr_wid = None
+        self.curr_entry_id = None
 
     def check_token(self, token):
         r = requests.get(self.api_url + '/me', auth=requests.auth.HTTPBasicAuth(token, 'api_token'))
@@ -94,9 +93,8 @@ class TogglAPI:
             r = requests.post(self.api_url + '/time_entries/start', json = {'time_entry': {'wid': wid, 'description': description, 'created_with': 'tomate-toggl-plugin'}}, auth=requests.auth.HTTPBasicAuth(self.token, 'api_token'))
             if r.status_code == 200:
                 data = json.loads(r.text)
-                global curr_entry_id, curr_wid
-                curr_entry_id = data['data']['id']
-                curr_wid = data['data']['wid']
+                self.curr_entry_id = data['data']['id']
+                self.curr_wid = data['data']['wid']
                 logger.info('Started {0} entry as ID {1}'.format(description, curr_entry_id))
                 return True
             else:
@@ -109,9 +107,8 @@ class TogglAPI:
             r = requests.put('{0}/time_entries/{1}/stop'.format(self.api_url, entry_id), auth=requests.auth.HTTPBasicAuth(self.token, 'api_token'))
             if r.status_code == 200:
                 logger.info('{0} entry stopped'.format(entry_id))
-                global curr_entry_id, curr_wid
-                curr_entry_id = None
-                curr_wid = None
+                self.curr_entry_id = None
+                self.curr_wid = None
             else:
                 logger.error('Failed to stop entry {1}: \n{0}'.format(r.text, r.url))
         else:
@@ -130,8 +127,6 @@ class TogglGUI(Gtk.Dialog):
             window_position=Gtk.WindowPosition.CENTER_ON_PARENT,
             buttons=(Gtk.STOCK_APPLY, Gtk.ResponseType.APPLY)
         )
-        # self.connect('response', self.)
-        self.set_size_request(350, 300)
 
         grid = Gtk.Grid(
             column_spacing=6,
