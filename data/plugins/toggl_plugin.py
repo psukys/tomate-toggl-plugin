@@ -186,6 +186,7 @@ class PreferenceDialog:
     rows = 0
 
     def __init__(self, config):
+        self.checked = None
         self.config = config
 
         self.widget = Gtk.Dialog(
@@ -194,7 +195,7 @@ class PreferenceDialog:
             modal=True,
             resizable=False,
             window_position=Gtk.WindowPosition.CENTER_ON_PARENT,
-            buttons=(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE)
+            buttons=(Gtk.STOCK_APPLY, Gtk.ResponseType.APPLY, Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE)
         )
         self.widget.connect('response', self.on_dialog_response)
         self.widget.set_size_request(350, 300)
@@ -227,15 +228,17 @@ class PreferenceDialog:
         return self.widget
 
     def on_dialog_response(self, widget, response):
-        for command_name in COMMANDS:
-            entry = getattr(self, command_name + '_entry')
-            command = parse_command(entry.get_text())
+        if response == Gtk.ResponseType.CLOSE:
+            widget.hide()
+            return
 
-            if command:
-                logger.debug('action=setConfig option=%s value=%s', command_name, command)
-                self.config.set(CONFIG_SECTION_NAME, command_name, command)
-
-        widget.hide()
+        if response == Gtk.ResponseType.APPLY:
+            if self.checked:
+                self.config.set(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME, togglAPI.token)
+                widget.hide()
+            else:
+                # Not a nice way to reuse, but still...
+                self.check_api_token_button_clicked(None)
 
     def read_config(self):
         logger.debug('action=readConfig')
@@ -273,10 +276,10 @@ class PreferenceDialog:
     def check_api_token_button_clicked(self, button):
         entry = getattr(self, CONFIG_API_OPTION_NAME + '_entry')
         token = entry.get_text()
-        checked = togglAPI.check_token(token)
+        self.checked = togglAPI.check_token(token)
         clabel = getattr(self, CONFIG_API_OPTION_NAME + '_clabel')
-        if checked:
-            clabel.set_text(checked)
+        if self.checked:
+            clabel.set_text(self.checked)
         else:
             clabel.set_text('Token invalid')
 
