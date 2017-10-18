@@ -21,6 +21,7 @@ class TogglGUI(Gtk.Dialog):
         """
         self.logger = logging.getLogger('TogglGUI')
         self.wid = None
+        self.entry = None
         self.togglAPI = togglAPI
 
         Gtk.Dialog.__init__(

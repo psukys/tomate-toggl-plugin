@@ -30,8 +30,6 @@ COMMANDS = [
 class PreferenceDialog:
     """Gtk Dialog for preferences."""
 
-    rows = 0
-
     def __init__(self, config):
         """
         Set up internals and build up GUI.
