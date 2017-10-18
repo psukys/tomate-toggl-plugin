@@ -1,8 +1,10 @@
 """Toggl related GUI instances."""
-from .TogglAPI import TogglAPI
 import logging
 from gi.repository import Gtk
 import gi
+from locale import gettext as _
+from .TogglAPI import TogglAPI
+
 
 gi.require_version('Gtk', '3.0')
 
@@ -19,6 +21,7 @@ class TogglGUI(Gtk.Dialog):
         """
         self.logger = logging.getLogger('TogglGUI')
         self.wid = None
+        self.entry = None
         self.togglAPI = togglAPI
 
         Gtk.Dialog.__init__(
