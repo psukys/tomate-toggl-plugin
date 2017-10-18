@@ -1,22 +1,20 @@
-"""
-Tomate time tracker Toggl integration plugin.
-"""
+"""Tomate time tracker Toggl integration plugin."""
 from __future__ import unicode_literals
+
+import logging
+import urllib
+import json
+import datetime
+from locale import gettext as _
+import requests
+import gi
+from gi.repository import Gtk
 import tomate.plugin
 from tomate.constant import State
 from tomate.event import Events, on
 from tomate.graph import graph
 from tomate.utils import suppress_errors
 from tomate.constant import Task
-import gi
-from gi.repository import Gtk
-import logging
-import requests
-import urllib
-import json
-import datetime
-from locale import gettext as _
-
 from .TogglAPI import TogglAPI
 from .TogglGUI import TogglGUI
 
@@ -36,7 +34,7 @@ class PreferenceDialog:
 
     def __init__(self, config):
         """
-        Setup internals and build up GUI.
+        Set up internals and build up GUI.
 
         Args:
             config: Tomate config instance
@@ -144,7 +142,6 @@ class PreferenceDialog:
         self.checked = self.togglAPI.check_token(token)
         clabel = getattr(self, CONFIG_API_OPTION_NAME + '_clabel')
         if self.checked:
-            print('setting clabel to {0}'.format(self.checked))
             clabel.set_text(self.checked)
         else:
             clabel.set_text(_('Token invalid'))
@@ -179,7 +176,6 @@ class TogglPlugin(tomate.plugin.Plugin):
         if kwargs['task'] is not Task.pomodoro:
             return  # Only apply Toggl for working sessions
         token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
-        self.togglAPI.check_token(token)
 
         toggl_window = TogglGUI(self.togglAPI)
         response = toggl_window.run()
@@ -195,7 +191,6 @@ class TogglPlugin(tomate.plugin.Plugin):
         if self.toggl_activity_started:
             token = self.config.get(
                 CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
-            self.togglAPI.check_token(token)
 
             self.togglAPI.stop_entry(self.togglAPI.curr_entry_id)
             self.toggl_activity_started = False
@@ -204,7 +199,6 @@ class TogglPlugin(tomate.plugin.Plugin):
     @on(Events.Session, [State.finished])
     def on_session_finished(self, *args, **kwargs):
         token = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
-        self.togglAPI.check_token(token)
 
         self.togglAPI.stop_entry(self.togglAPI.curr_entry_id)
 

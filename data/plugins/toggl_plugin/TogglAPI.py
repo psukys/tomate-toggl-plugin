@@ -1,9 +1,20 @@
 """Toggl API functionality implementation."""
 import logging
-import requests
 import urllib
 import json
+import time
 import datetime
+import requests
+
+
+class UserUTC(datetime.tzinfo):
+    """Fixing datetime functionality by explicitly stating current timezone."""
+
+    def utcoffset(self, dt):
+        """UTC offset method that is called when datetime needs."""
+        # Use time to deduce utc offset
+        offset_seconds = time.localtime().tm_gmtoff
+        return datetime.timedelta(seconds=offset_seconds)
 
 
 class TogglAPI:
@@ -79,7 +90,6 @@ class TogglAPI:
         Returns:
             None if not valid, user email if valid
         """
-
         old_token = self.token
         self.token = token
 
@@ -89,7 +99,7 @@ class TogglAPI:
             return data['data']['email']
         else:
             self.token = old_token
-            self.logger.error('Token check failed:\n{0}'.format(response.text))
+            self.logger.error('Token check failed: {0}'.format(response.text))
 
     def get_workspaces(self):
         """
@@ -109,6 +119,46 @@ class TogglAPI:
         else:
             self.logger.error('No token set')
 
+    def adjust_datetime_to_iso8601(self, dtime):
+        """
+        Adjust datetime to Toggl's specified ISO8601 format.
+
+        Args:
+            dtime: datetime object
+        Returns:
+            given datetime encoded in ISO8601 format, i.e. 2017-10-18T17:48:06.840314+02:00
+
+        """
+        iso_time = dtime.replace(tzinfo=UserUTC()).isoformat()
+        # god bless datetime thinks that one can omit UTC 0 (+00:00)
+        if '+' not in iso_time:
+            iso_time += '+00:00'
+
+        return iso_time
+
+    def get_start_end_isodates(self, timedelta=datetime.timedelta(days=7)):
+        """
+        Get start and end dates in ISO 8601 format (as defined in Toggl docs).
+
+        Args:
+            timedelta: difference from end_date to start date
+
+        end_date will be current time
+        start_date has to be before end_date, thus negative time deltas are not accepted.
+
+        Returns:
+            tuple (start_date, end_date)
+
+        """
+        if timedelta < datetime.timedelta():
+            self.logger.error('Bad timedelta given, should be positive')
+            return None
+
+        end_date = datetime.datetime.today()
+        start_date = datetime.datetime.today() - timedelta
+        return (self.adjust_datetime_to_iso8601(start_date),
+                self.adjust_datetime_to_iso8601(end_date),)
+
     def get_entries(self, wid):
         """
         Get time entries from Toggl for specified workspace.
@@ -121,20 +171,11 @@ class TogglAPI:
         # last week's entries
         # TODO: Make time range a variable (maybe fetched from settings)
         if self.token:
-            # Build timestamps
-            def fake_utcoffset(d):
-                # TODO: not be so lazy
-                dot_idx = d.index('.')
-                d = d[:dot_idx]
-                d += '+00:00'
-                return d
+            start_date, end_date = self.get_start_end_isodates()
+            end_date_quoted = urllib.parse.quote_plus(end_date)
+            start_date_quoted = urllib.parse.quote_plus(start_date)
+            response = self.request_get('/time_entries?start_date={0}&end_date={1}'.format(start_date_quoted, end_date_quoted))
 
-            end_date = urllib.parse.quote_plus(
-                fake_utcoffset(datetime.datetime.today().isoformat()))
-            start_date = datetime.datetime.today() - datetime.timedelta(days=7)
-            start_date = urllib.parse.quote_plus(
-                fake_utcoffset(start_date.isoformat()))
-            response = self.request_get('/time_entries?start_date={0}&end_date={1}'.format(start_date, end_date))
             # filter with workspace id given
             data = json.loads(response.text)
             self.logger.debug('Got {0} time entries'.format(len(data)))
@@ -192,8 +233,7 @@ class TogglAPI:
             True if stopped, else None
         """
         if self.token:
-            r = requests.put('{0}/time_entries/{1}/stop'.format(self.api_url, entry_id),
-                             auth=requests.auth.HTTPBasicAuth(self.token, 'api_token'))
+            r = self.request_put('{0}/time_entries/{1}/stop'.format(self.api_url, entry_id))
             if r.status_code == 200:
                 self.logger.info('{0} entry stopped'.format(entry_id))
                 self.curr_entry_id = None
