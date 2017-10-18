@@ -22,8 +22,10 @@ gi.require_version('Gtk', '3.0')
 
 CONFIG_SECTION_NAME = 'toggl_plugin'
 CONFIG_API_OPTION_NAME = 'api_token'
+CONFIG_ENTRY_FETCH_LENGTH = 'entry_fetch_length'
 COMMANDS = [
-    CONFIG_API_OPTION_NAME
+    CONFIG_API_OPTION_NAME,
+    CONFIG_ENTRY_FETCH_LENGTH
 ]
 
 
@@ -88,6 +90,15 @@ class PreferenceDialog:
         grid.attach(self.check_label, 0, 4, 1, 1)
         setattr(self, CONFIG_API_OPTION_NAME + '_clabel', self.check_label)
 
+        entry_length_label = Gtk.Label(_('Days back to fetch time entry descriptions'))
+        grid.attach(entry_length_label, 0, 5, 1, 1)
+        entry_length_adjustment = Gtk.Adjustment(7, 0, 31, 1, 1, 1)
+
+        entry_length_hscale = Gtk.HScale(adjustment=entry_length_adjustment)
+        entry_length_hscale.set_digits(0)
+        grid.attach(entry_length_hscale, 0, 6, 1, 1)
+        setattr(self, CONFIG_ENTRY_FETCH_LENGTH + '_hscale', entry_length_hscale)
+
         self.widget.get_content_area().add(grid)
 
     def run(self):
@@ -121,12 +132,16 @@ class PreferenceDialog:
         """Read config for relevant saved values."""
         self.logger.debug('action=readConfig')
 
-        for command_name in COMMANDS:
-            command = self.config.get(CONFIG_SECTION_NAME, command_name)
-            entry = getattr(self, command_name + '_entry')
+        command = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
+        if command is not None:
+            entry = getattr(self, CONFIG_API_OPTION_NAME + '_entry')
+            entry.set_text(command)
 
-            if command is not None:
-                entry.set_text(command)
+        command = self.config.get(CONFIG_SECTION_NAME, CONFIG_ENTRY_FETCH_LENGTH)
+        if command is not None:
+            hscale = getattr(self, CONFIG_ENTRY_FETCH_LENGTH + '_hscale')
+            hscale.set_value(command)
+
 
     def check_api_token_button_clicked(self, button):
         """
