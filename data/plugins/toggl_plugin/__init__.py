@@ -77,27 +77,23 @@ class PreferenceDialog:
         label.set_markup('<a href="https://toggl.com/app/profile">{0}</a>'.format(_('API key')))
         grid.attach(label, 0, 1, 1, 1)
 
-        entry = Gtk.Entry(editable=True, sensitive=True)
-        grid.attach(entry, 0, 2, 1, 1)
-        setattr(self, CONFIG_API_OPTION_NAME + '_entry', entry)
+        self.api_entry = Gtk.Entry(editable=True, sensitive=True)
+        grid.attach(self.api_entry, 0, 2, 1, 1)
 
-        button = Gtk.Button(label=_('Check'))
-        button.connect('clicked', self.check_api_token_button_clicked)
-        grid.attach(button, 0, 3, 1, 1)
-        setattr(self, CONFIG_API_OPTION_NAME + '_button', button)
+        self.check_button = Gtk.Button(label=_('Check'))
+        self.check_button.connect('clicked', self.check_api_token_button_clicked)
+        grid.attach(self.check_button, 0, 3, 1, 1)
 
         self.check_label = Gtk.Label('')
         grid.attach(self.check_label, 0, 4, 1, 1)
-        setattr(self, CONFIG_API_OPTION_NAME + '_clabel', self.check_label)
 
-        entry_length_label = Gtk.Label(_('Days back to fetch time entry descriptions'))
-        grid.attach(entry_length_label, 0, 5, 1, 1)
+        self.entry_length_label = Gtk.Label(_('Days back to fetch time entry descriptions'))
+        grid.attach(self.entry_length_label, 0, 5, 1, 1)
         entry_length_adjustment = Gtk.Adjustment(7, 0, 31, 1, 1, 1)
 
-        entry_length_hscale = Gtk.HScale(adjustment=entry_length_adjustment)
-        entry_length_hscale.set_digits(0)
-        grid.attach(entry_length_hscale, 0, 6, 1, 1)
-        setattr(self, CONFIG_ENTRY_FETCH_LENGTH + '_hscale', entry_length_hscale)
+        self.entry_length_hscale = Gtk.HScale(adjustment=entry_length_adjustment)
+        self.entry_length_hscale.set_digits(0)
+        grid.attach(self.entry_length_hscale, 0, 6, 1, 1)
 
         self.widget.get_content_area().add(grid)
 
@@ -120,13 +116,19 @@ class PreferenceDialog:
             return
 
         if response == Gtk.ResponseType.APPLY:
+            # Save time entry retrieval length
+            self.config.set(CONFIG_SECTION_NAME,
+                            CONFIG_ENTRY_FETCH_LENGTH, str(int(self.entry_length_hscale.get_value())))
+
+            if not self.checked:
+                self.checked = self.verify_api_token(self.api_entry.get_text())
+
             if self.checked:
                 self.config.set(CONFIG_SECTION_NAME,
                                 CONFIG_API_OPTION_NAME, self.togglAPI.token)
                 widget.hide()
             else:
-                # Not a nice way to reuse, but still...
-                self.check_api_token_button_clicked(None)
+                self.check_label.set_text(_('Token invalid'))
 
     def read_config(self):
         """Read config for relevant saved values."""
@@ -134,14 +136,21 @@ class PreferenceDialog:
 
         command = self.config.get(CONFIG_SECTION_NAME, CONFIG_API_OPTION_NAME)
         if command is not None:
-            entry = getattr(self, CONFIG_API_OPTION_NAME + '_entry')
-            entry.set_text(command)
+            self.api_entry.set_text(command)
 
         command = self.config.get(CONFIG_SECTION_NAME, CONFIG_ENTRY_FETCH_LENGTH)
         if command is not None:
-            hscale = getattr(self, CONFIG_ENTRY_FETCH_LENGTH + '_hscale')
-            hscale.set_value(command)
+            self.entry_length_hscale.set_value(int(command))
 
+    def verify_api_token(self, token):
+        """
+        Verify Toggl API token.
+
+        Args:
+            token:  Toggl API token string
+        Returns: None if API token invalid or profile's email.
+        """
+        return self.togglAPI.check_token(token)
 
     def check_api_token_button_clicked(self, button):
         """
@@ -150,14 +159,13 @@ class PreferenceDialog:
         Args:
             button: clicked button object
         """
-        entry = getattr(self, CONFIG_API_OPTION_NAME + '_entry')
-        token = entry.get_text()
-        self.checked = self.togglAPI.check_token(token)
-        clabel = getattr(self, CONFIG_API_OPTION_NAME + '_clabel')
+        token = self.api_entry.get_text()
+        self.checked = self.verify_api_token(token)
+
         if self.checked:
-            clabel.set_text(self.checked)
+            self.check_label.set_text(self.checked)
         else:
-            clabel.set_text(_('Token invalid'))
+            self.check_label.set_text(_('Token invalid'))
 
 
 class TogglPlugin(tomate.plugin.Plugin):
